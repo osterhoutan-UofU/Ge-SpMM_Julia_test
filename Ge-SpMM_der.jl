@@ -37,13 +37,16 @@ function SpMM_der(  M::Int, K::Int, N::Int,
                 ptr += 32
 
                 for kk in 0:(warpsize-1)
-                    if (jj+kk < hb) #= then =# break end
                     offset = colInd_sh[shmem_offset+kk]
                     acc += val_sh[shmem_offset+kk] * B[offset, cid]
+                    if (jj+kk < hb) 
+                        break
+                    end
                 end	#? for kk in 0:(warpsize-1) 
                 CUDA.sync_warp()
             end	#? for jj in lb:warpsize():(hb-1) 
             C[rid,cid] = acc
+            return nothing
 
         else
             for jj in lb:warpsize():(hb-1)
@@ -55,22 +58,25 @@ function SpMM_der(  M::Int, K::Int, N::Int,
                 ptr += 32
 
                 for kk in 0:(warpsize-1)
-                    if (jj+kk < hb) #= then =# break end
                     offset = colInd_sh[shmem_offset+kk]
                     if (cid<=N)
                         acc += val_sh[shmem_offset+kk] * B[offset, cid]
                     end
+                    if (jj+kk < hb) #= then =# break end
                 end	#? for kk in 0:(warpsize-1) 
                 CUDA.sync_warp()
             end	#? for jj in lb:warpsize():(hb-1) 
             if (cid<=N)
                 C[rid,cid] = acc
             end
-        end #? if (blockIdx().y != gridDim().y-1) ... else
+            return nothing
+        end #? if (blockIdx().y != gridDim().y-1) ... else ...
     end #? if (rid < M)
     return nothing
-end #? function SpMM
+end #? function SpMM_der(M,K,N, A_rowPtr, A_colInd, A_val, B, C, tile_row)
 
+
+_warpsize = :(CUDA.warpsize(CUDA.device()))
 
 
 function _Test__SpMM_der(dims, doRand; FP_TOL::Float64=0.0001, verbose::Bool=false, tile_row::Int=8)
@@ -97,8 +103,9 @@ function _Test__SpMM_der(dims, doRand; FP_TOL::Float64=0.0001, verbose::Bool=fal
     copyto!(B_d, B)
 
     # - Run the test
-    @cuda blocks = ((M+tile_row-1)÷tile_row, (N+warpsize()-1)÷warpsize(), 1) threads = (32, tile_row, 1) shmem = (warpsize()*tile_row*(sizeof(Int)+sizeof(Float64))) SpMM_der(M,K,N, rowPtr_d, colInd_d, val_d, B_d, C_d)
+    @device_code_warntype @cuda blocks = ((M+tile_row-1)÷tile_row, (N+_warpsize-1)÷_warpsize, 1) threads = (32, tile_row, 1) shmem = (_warpsize*tile_row*(sizeof(Int)+sizeof(Float64))) SpMM_der(M,K,N, rowPtr_d, colInd_d, val_d, B_d, C_d, tile_row=tile_row)
     copyto!(C, C_d)
+    
 
     # - evaluate the test
     _test_results_array = (-FP_TOL .< (C - (A * B)) .< FP_TOL)   # We must compare it this way because of floating operation errors. Could be interesting to understand why the calculus are different.

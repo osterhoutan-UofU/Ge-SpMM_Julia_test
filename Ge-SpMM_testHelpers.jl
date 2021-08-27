@@ -172,8 +172,8 @@ function _Test__SpMM2(dims, doRand; FP_TOL::Float64=0.0001, verbose::Bool=false)
     C = Matrix{Float64}(undef, M, N)
 
     # - init of every device ressources
-    sm_k = CuArray{Int}(undef, M * N)
-    sm_v = CuArray{Float64}(undef, M * N)
+    # sm_k = CuArray{Int}(undef, M * N)
+    # sm_v = CuArray{Float64}(undef, M * N)
 
     rowPtr_d = CuArray{Int}(undef, size(A_CRC[1], 1))
     colInd_d = CuArray{Int}(undef, size(A_CRC[2], 1))
@@ -189,7 +189,7 @@ function _Test__SpMM2(dims, doRand; FP_TOL::Float64=0.0001, verbose::Bool=false)
     copyto!(B_d, B)
 
     # - Run the test
-    @cuda threads = N ÷ 2 blocks = M SpMM2(rowPtr_d, colInd_d, val_d, B_d, C_d, sm_k, sm_v)
+    @cuda threads = N ÷ 2 blocks = M SpMM2(rowPtr_d, colInd_d, val_d, B_d, C_d#= , sm_k, sm_v =#)
     copyto!(C, C_d)
 
     # - evaluate the test

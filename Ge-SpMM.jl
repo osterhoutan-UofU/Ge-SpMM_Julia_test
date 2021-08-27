@@ -73,26 +73,22 @@ function SpMM(  rowPtr::CuDeviceVector{Int32,1},
     j = tid
     lane_id = (j - 1) % warp_size 
     sm_bBase = tb_dim*(i-1)
-    sm_base = sm_bBase + (j - lane_id)
+    sm_base = j - lane_id
     row_start = rowPtr[i]
     row_end = rowPtr[i + 1] 
     result::Float64 = 0.0
-    sm_k = @cuStaticSharedMem(Int32, 4096)
-    sm_v = @cuStaticSharedMem(Float64, 4096)
+    sm_k = @cuStaticSharedMem(Int32, 1024)
+    sm_v = @cuStaticSharedMem(Float64, 1024)
     for ptr in row_start:warp_size:(row_end - 1)    
         if ptr + lane_id < row_end            
-            sm_k[sm_bBase+j] = colInd[ptr + lane_id]
-            sm_v[sm_bBase+j] = val[ptr + lane_id]
-            # sm_k[tid + (tb_id - 1) * tb_dim] = colInd[ptr + lane_id]
-            # sm_v[tid + (tb_id - 1) * tb_dim] = val[ptr + lane_id]
+            sm_k[j] = colInd[ptr + lane_id]
+            sm_v[j] = val[ptr + lane_id]
         end
         CUDA.sync_warp()
         for kk in 0:(warp_size - 1)
             if (ptr + kk <= (row_end - 1))
                 k = sm_k[sm_base + kk]
                 result += sm_v[sm_base + kk] * B[k,j]
-                # k = sm_k[sm_base + kk + (tb_id - 1) * tb_dim]
-                # result += sm_v[sm_base + kk + (tb_id - 1) * tb_dim] * B[k,j]
             end
         end
         CUDA.sync_warp()
@@ -111,10 +107,10 @@ function SpMM2_lin(N, M, rowPtr, colInd, val, B; warp_size=32)
     tb_dim = M
     sm_k = Array{Int32,1}(undef, tb_dim)
     sm_v = Array{Float64,1}(undef, tb_dim)
-    for i in 1:N
+    for i in 1:M
         row_start = rowPtr[i]
         row_end = rowPtr[i + 1]
-        for jj in 1:warp_size:(M ÷ 2)
+        for jj in 1:warp_size:(N ÷ 2)
             for j in jj:(jj + warp_size - 1)
                 lane_id = (j - 1) % warp_size
                 for ptr in row_start:warp_size:(row_end - 1)
@@ -131,23 +127,18 @@ function SpMM2_lin(N, M, rowPtr, colInd, val, B; warp_size=32)
                 result_1::Float64 = 0.0
                 result_2::Float64 = 0.0
                 for ptr in row_start:warp_size:(row_end - 1)
-                    for kk in 0:warp_size
-                        if ptr + kk <= (row_end - 1) 
+                    for kk in 0:(warp_size-1)
+                        if ptr + kk < row_end
                             k = colInd[ptr + kk]
                             result_1 += sm_v[sm_base + kk] * B[k,j]
-                            result_2 += sm_v[sm_base + kk] * B[k,j + warp_size]
+                            if j+warp_size <= M
+                                result_2 += sm_v[sm_base + kk] * B[k,j+warp_size]
+                            end
                         end
                     end
                 end
                 C[i,j] = result_1
                 C[i,j + warp_size] = result_2
-                # println("\n"*
-                #         "[DEBUG]  :: dubug output for `SpMM2_lin` \n"*
-                #         "         ::\ti: $(i), jj: $(jj), j: $(j) \n"*
-                #         "         ::\tC[$(i),$(j)]: $(result_1)\n"*
-                #         "         ::\tC[$(i),$(j+warp_size)]: $(result_2)\n"*
-                #         "         ::\tC: $(C)\n"*
-                #         "         :: [END]\n")
             end
         end
     end
@@ -160,31 +151,33 @@ end	# ? function SpMM2_lin(N,M, rowPtr, colInd, val, B)
 The parrallel CUDA version of the Ge-SpMM loop unrolled algortihm
  _(algorithm 2 in [the paper](https://arxiv.org/pdf/2007.03179.pdf))_.
 """
-function SpMM2(rowPtr, colInd, val, B, C, sm_k, sm_v)
+function SpMM2(rowPtr, colInd, val, B, C#= , sm_k, sm_v =#)
     warp_size = CUDA.warpsize() 
     j = CUDA.threadIdx().x
     i = CUDA.blockIdx().x
     tb_dim = CUDA.blockDim().x
     lane_id = (j - 1) % warp_size 
-    sm_bBase = tb_dim*(i-1)
+    # sm_bBase = tb_dim*(i-1)
     sm_base = sm_bBase + (j - lane_id)
     row_start = rowPtr[i]
     row_end = rowPtr[i + 1]
     result_1::Float64 = 0.0
     result_2::Float64 = 0.0
-    # sm_k = CUDA.CuDeviceArray{Int32}(tb_dim)
-    # sm_v = CUDA.CuDeviceArray{Float64}(tb_dim)
+    sm_k = @cuStaticSharedMem(Int32, 1024)
+    sm_v = @cuStaticSharedMem(Float64, 1024)
     for ptr in row_start:warp_size:(row_end - 1)
         if (ptr+lane_id < row_end)            
-            sm_k[sm_bBase+j] = colInd[ptr+lane_id]
-            sm_v[sm_bBase+j] = val[ptr+lane_id]
+            sm_k[j] = colInd[ptr+lane_id]
+            sm_v[j] = val[ptr+lane_id]
         end #? if (ptr + lane_id < row_end)
         CUDA.sync_warp()
-        for kk in 0:warp_size
+        for kk in 0:(warp_size-1)
             if (ptr + kk <= (row_end - 1))
                 k = sm_k[sm_base+kk]
                 result_1 += sm_v[sm_base+kk] * B[k,j]
-                result_2 += sm_v[sm_base+kk] * B[k,j+warp_size]
+                if j+warp_size <= M
+                    result_2 += sm_v[sm_base + kk] * B[k,j+warp_size]
+                end
             end #? if (ptr + kk <= (row_end - 1))
         end #? for kk in 0:warp_size
     end #? for ptr in row_start:warp_size:(row_end - 1)
