@@ -72,7 +72,7 @@ function SpMM(  rowPtr::CuDeviceVector{Int32,1},
     i = tb_id
     j = tid
     lane_id = (j - 1) % warp_size 
-    sm_bBase = tb_dim*(i-1)
+    # sm_bBase = tb_dim*(i-1)
     sm_base = j - lane_id
     row_start = rowPtr[i]
     row_end = rowPtr[i + 1] 
@@ -80,7 +80,7 @@ function SpMM(  rowPtr::CuDeviceVector{Int32,1},
     sm_k = @cuStaticSharedMem(Int32, 1024)
     sm_v = @cuStaticSharedMem(Float64, 1024)
     for ptr in row_start:warp_size:(row_end - 1)    
-        if ptr + lane_id < row_end            
+        if ptr + lane_id < row_end      
             sm_k[j] = colInd[ptr + lane_id]
             sm_v[j] = val[ptr + lane_id]
         end
@@ -151,14 +151,14 @@ end	# ? function SpMM2_lin(N,M, rowPtr, colInd, val, B)
 The parrallel CUDA version of the Ge-SpMM loop unrolled algortihm
  _(algorithm 2 in [the paper](https://arxiv.org/pdf/2007.03179.pdf))_.
 """
-function SpMM2(rowPtr, colInd, val, B, C#= , sm_k, sm_v =#)
+function SpMM2(M, rowPtr, colInd, val, B, C#= , sm_k, sm_v =#)
     warp_size = CUDA.warpsize() 
     j = CUDA.threadIdx().x
     i = CUDA.blockIdx().x
     tb_dim = CUDA.blockDim().x
     lane_id = (j - 1) % warp_size 
     # sm_bBase = tb_dim*(i-1)
-    sm_base = sm_bBase + (j - lane_id)
+    sm_base = #= sm_bBase + =# (j - lane_id)
     row_start = rowPtr[i]
     row_end = rowPtr[i + 1]
     result_1::Float64 = 0.0
@@ -172,10 +172,10 @@ function SpMM2(rowPtr, colInd, val, B, C#= , sm_k, sm_v =#)
         end #? if (ptr + lane_id < row_end)
         CUDA.sync_warp()
         for kk in 0:(warp_size-1)
-            if (ptr + kk <= (row_end - 1))
+            if (ptr + kk ≤ (row_end- 1))
                 k = sm_k[sm_base+kk]
                 result_1 += sm_v[sm_base+kk] * B[k,j]
-                if j+warp_size <= M
+                if j+warp_size ≤ M
                     result_2 += sm_v[sm_base + kk] * B[k,j+warp_size]
                 end
             end #? if (ptr + kk <= (row_end - 1))

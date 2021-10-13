@@ -165,11 +165,11 @@ end	# ? function _Test__SpMM2_lin(N,M, A_CRC, B)
 
 
 function _Test__SpMM2(dims, doRand; FP_TOL::Float64=0.0001, verbose::Bool=false)
-    M, K, N, SR = dims
+    # M, K, N, SR = dims
     A = genSpM(dims.M, dims.K, sparse_ratio=dims.SR, doRand=doRand)
     A_CRC = to_CRC(A)
     B = genSpM(dims.K, dims.N, doRand=doRand)
-    C = Matrix{Float64}(undef, M, N)
+    C = Matrix{Float64}(undef, dims.M, dims.N)
 
     # - init of every device ressources
     # sm_k = CuArray{Int}(undef, M * N)
@@ -179,8 +179,8 @@ function _Test__SpMM2(dims, doRand; FP_TOL::Float64=0.0001, verbose::Bool=false)
     colInd_d = CuArray{Int}(undef, size(A_CRC[2], 1))
     val_d = CuArray{Float64}(undef, size(A_CRC[3], 1))
 
-    B_d = CuArray{Float64}(undef, (K, N))
-    C_d1 = CuArray{Float64}(undef, (M, N))
+    B_d = CuArray{Float64}(undef, (dims.K, dims.N))
+    C_d = CuArray{Float64}(undef, (dims.M, dims.N))
 
     # - copying data to the device
     copyto!(rowPtr_d, A_CRC[1])
@@ -189,7 +189,7 @@ function _Test__SpMM2(dims, doRand; FP_TOL::Float64=0.0001, verbose::Bool=false)
     copyto!(B_d, B)
 
     # - Run the test
-    @cuda threads = N ÷ 2 blocks = M SpMM2(rowPtr_d, colInd_d, val_d, B_d, C_d#= , sm_k, sm_v =#)
+    @cuda threads = dims.N ÷ 2 blocks = dims.M SpMM2(dims.M, rowPtr_d, colInd_d, val_d, B_d, C_d#= , sm_k, sm_v =#)
     copyto!(C, C_d)
 
     # - evaluate the test
@@ -201,16 +201,16 @@ function _Test__SpMM2(dims, doRand; FP_TOL::Float64=0.0001, verbose::Bool=false)
     if !_test_result
         println("""
 [TEST-FAIL] :: Ge-SpMM's Algorithm 3 implimentation (`SpMM2`) did NOT produce the right answer on GENERATED data !!
-            ::\tdims: (M: $M, K: $K, N: $N)
+            ::\tdims: (M: $(dims.M), K: $(dims.K), N: $(dims.N))
             ::\tFP Tollerance: $(FP_TOL)
-            ::\t Result Array: $(getShowString_log(_test_results_array))
+            ::\tResult Array: $(getShowString_log(_test_results_array))
             :: [END]
                 """)
         return false
     else 
         println("""
 [TEST-PASS] :: Ge-SpMM's Algorithm 3 implimentation (`SpMM2`) DID produce the right answer on GENERATED data !!
-            ::\tdims: (M: $M, K: $K, N: $N)
+            ::\tdims: (M: $(dims.M), K: $(dims.K), N: $(dims.N))
             :: [END]
             """) 
         return true 

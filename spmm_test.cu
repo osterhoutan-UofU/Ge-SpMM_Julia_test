@@ -70,27 +70,27 @@ __global__ void spmm_test0(
 {
     int rid = blockDim.y*blockIdx.x+threadIdx.y;
     if (rid<A_nrows) {
-    int cid = (blockIdx.y<<5)+threadIdx.x;
-    int lb = A_csrRowPtr[rid];
-    int hb = A_csrRowPtr[(rid+1)];
-    int offset = 0;
-    T acc=0;
-    if (blockIdx.y!=gridDim.y-1){
-        for (int ptr = lb; ptr<hb; ptr++) {
-            offset = A_csrColInd[ptr]*B_ncols+cid;
-            acc += A_csrVal[ptr]*B_dnVal[offset];
+        int cid = (blockIdx.y<<5)+threadIdx.x;
+        int lb = A_csrRowPtr[rid];
+        int hb = A_csrRowPtr[(rid+1)];
+        int offset = 0;
+        T acc=0;
+        if (blockIdx.y!=gridDim.y-1){
+            for (int ptr = lb; ptr<hb; ptr++) {
+                offset = A_csrColInd[ptr]*B_ncols+cid;
+                acc += A_csrVal[ptr]*B_dnVal[offset];
+            }
+            C_dnVal[(rid*B_ncols+cid)] = acc;
         }
-        C_dnVal[(rid*B_ncols+cid)] = acc;
-    }
-    else {
-        for (int ptr = lb; ptr<hb; ptr++) {
+        else {
+            for (int ptr = lb; ptr<hb; ptr++) {
+                if (cid<B_ncols) {
+                offset = A_csrColInd[ptr]*B_ncols+cid;}
+                acc += A_csrVal[ptr]*B_dnVal[offset];
+            }
             if (cid<B_ncols) {
-            offset = A_csrColInd[ptr]*B_ncols+cid;}
-            acc += A_csrVal[ptr]*B_dnVal[offset];
+            C_dnVal[(rid*B_ncols+cid)] = acc;}
         }
-        if (cid<B_ncols) {
-        C_dnVal[(rid*B_ncols+cid)] = acc;}
-    }
     }
 }
 
