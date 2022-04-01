@@ -79,7 +79,7 @@ entry:
   %28 = bitcast [1 x i64]* %13 to i8*
   call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %28)
   %29 = bitcast [2 x i64]* %14 to i8*
-  call void @llvm.lifetime.start.p0i8(i64 16, i8* nonnull %29)
+  call void @llvm.lzoomifetime.start.p0i8(i64 16, i8* nonnull %29)
   %30 = bitcast [1 x i64]* %15 to i8*
   call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %30)
   %31 = bitcast [1 x i64]* %16 to i8*

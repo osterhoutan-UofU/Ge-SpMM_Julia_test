@@ -1,0 +1,82 @@
+### Example code (analysed by pet)
+# void polynomial_product(int n, int *A, int *B, int *C) {
+#     for(int k = 0; k < 2*n-1; k++)
+# S:      C[k] = 0;
+#     for(int i = 0; i < n; i++)
+#         for(int j = 0; j < n; j++)
+# T:          C[i+j] += A[i] * B[j];
+# }
+
+Domain := [M,N,K,A_VAL_S] -> {
+    # I[i, j] : 0 <= i < M and 0 <= j < N;
+    T[i, j, ptr] : 0 <= i < M and 0 <= j < N and 0 <= ptr < A_VAL_S;
+    # S[i, j] : 0 <= i < M and 0 <= j < N;
+    # A_row[i_row] : 0 <= i_row <= M;
+    # A_colInd[ptr] : 0 <= ptr <= CS-1;
+    # A_val[k] : 0 <= k <= CS-1;
+};
+
+Read := [M,N,K,A_VAL_S] -> {  # base read relations
+    # I[i, j] -> C[i,j];
+    T[i, j, ptr] -> A_row[i]; 
+    T[i, j, ptr] -> A_row[i+1];
+    T[i, j, ptr] -> A_colInd[ptr];
+    T[i, j, ptr] -> A_val[ptr];
+    T[i, j, ptr] -> B[k,j] : 0 <= k < K;  # lazy over rep since B is read only in this algorithm
+    T[i, j, ptr] -> C[i,j];
+  } * Domain;
+
+Write := [M,N,K,A_VAL_S] -> {
+    T[i, j, ptr] -> C[i,j];
+} * Domain;
+
+Schedule := [M,N,K,A_VAL_S] -> {
+    T[i, j, ptr] -> [0, i, j, ptr];
+};
+
+print "Schedule";
+print Schedule;
+
+### Happens-Before relation without syntactic sugar
+# Lexico := { [i0,i1,i2] -> [o0,o1,o2] : i0 < o0 or i0 = o0 and i1 < o1 or i0 = o0 and i1 = o1 and i2 < o2 };
+# Before := Schedule . Lexico . (Schedule^-1)
+Before := Schedule << Schedule;
+
+print "Before";
+print Before;
+
+RaW := (Write . (Read^-1)) * Before;
+WaW := (Write . (Write^-1)) * Before;
+WaR := (Read . (Write^-1)) * Before;
+
+print "RaW deps";
+print RaW;
+
+print "WaW deps";
+print WaW;
+
+print "WaR deps";
+print WaR;
+
+IslSchedule := schedule Domain respecting (RaW+WaW+WaR) minimizing RaW;
+IslSchedule := IslSchedule + {}; # flatten the schedule tree
+
+print "IslSchedule";
+print IslSchedule;
+
+IslBefore := IslSchedule << IslSchedule;
+
+print "IslBefore";
+print IslBefore;
+
+print "Does IslSchedule respects RaW deps?";
+print RaW <= IslBefore;
+
+print "Does IslSchedule respects WaW deps?";
+print WaW <= IslBefore;
+
+print "Does IslSchedule respects WaR deps?";
+print WaR <= IslBefore;
+
+print "Codegen";
+codegen (IslSchedule * Domain);

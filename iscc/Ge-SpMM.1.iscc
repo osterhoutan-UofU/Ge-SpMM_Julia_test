@@ -1,0 +1,99 @@
+### Example code (analysed by pet)
+# void polynomial_product(int n, int *A, int *B, int *C) {
+#     for(int k = 0; k < 2*n-1; k++)
+# S:      C[k] = 0;
+#     for(int i = 0; i < n; i++)
+#         for(int j = 0; j < n; j++)
+# T:          C[i+j] += A[i] * B[j];
+# }
+
+Domain := [M,N,K,A_S] -> {
+    I[i, j] : 0 <= i < M and 0 <= j < N;
+    F[i, j, rs, re, ptr] : 0 <= i < M 
+                       and 0 <= j < N 
+                       and 0 <= rs <= ptr 
+                       and ptr <= re <= A_S;
+    T[i, j, rs, re, ptr, kk] : 0 <= i < M 
+                           and 0 <= j < N 
+                           and 0 <= rs <= ptr 
+                           and ptr <= re <= A_S 
+                           and 0 <= kk < 32;
+};
+
+
+
+    T[i0, j0, rs0, re0, ptr0] -> T[i1, j1, rs1, re1, ptr1] 
+        : i0 < i1 and re0 <= rs1
+
+
+
+Read := [M,N,K,A_S] -> {  # base read relations
+    I[i, j] -> A_rowPtr[i];
+    I[i, j] -> A_rowPtr[i+1];
+    F[i, j, rs, re, ptr] -> A_colInd[ptr + (j % 32)] : (ptr + (j % 32)) < re;  
+    F[i, j, rs, re, ptr] -> A_val[ptr + (j % 32)] :  (ptr + (j % 32)) < re;     
+    T[i, j, rs, re, ptr, kk] -> sm_k[(j - (j % 32)) + kk] :  (ptr+kk) < re;
+    T[i, j, rs, re, ptr, kk] -> sm_val[(j - (j % 32)) + kk] :  (ptr+kk) < re;
+    T[i, j, rs, re, ptr, kk] -> B[k,j] : 0 <= k < K 
+                                     and (ptr+kk) < re;
+    T[i, j, rs, re, ptr, kk] -> C[i,j] : (ptr+kk) < re;
+  } * Domain;
+
+Write := [M,N,K,A_S] -> {
+    F[i, j, rs, re, ptr] -> sm_k[j] : (ptr + (j % 32)) < re;
+    F[i, j, rs, re, ptr] -> sm_val[j] : (ptr + (j % 32)) < re;
+    T[i, j, rs, re, ptr, kk] -> C[i,j] : (ptr+kk) < re;
+} * Domain;
+
+Schedule := [M,N,K,A_S] -> {
+    I[i, j] -> [0, i, j];
+    F[i, j, rs, re, ptr] -> [1, i, j, rs, re, ptr]; 
+    T[i, j, rs, re, ptr, kk] -> [2, i, j, rs, re, ptr, kk];
+};
+
+print "Schedule";
+print Schedule;
+
+### Happens-Before relation without syntactic sugar
+# Lexico := { [i0,i1,i2] -> [o0,o1,o2] : i0 < o0 or i0 = o0 and i1 < o1 or i0 = o0 and i1 = o1 and i2 < o2 };
+# Before := Schedule . Lexico . (Schedule^-1)
+Before := Schedule << Schedule;
+
+print "Before";
+print Before;
+
+RaW := (Write . (Read^-1)) * Before;
+WaW := (Write . (Write^-1)) * Before;
+WaR := (Read . (Write^-1)) * Before;
+
+print "RaW deps";
+print RaW;
+
+print "WaW deps";
+print WaW;
+
+print "WaR deps";
+print WaR;
+
+IslSchedule := schedule Domain respecting (RaW+WaW+WaR) minimizing RaW;
+IslSchedule := IslSchedule + {}; # flatten the schedule tree
+
+print "IslSchedule";
+print IslSchedule;
+
+IslBefore := IslSchedule << IslSchedule;
+
+print "IslBefore";
+print IslBefore;
+
+print "Does IslSchedule respects RaW deps?";
+print RaW <= IslBefore;
+
+print "Does IslSchedule respects WaW deps?";
+print WaW <= IslBefore;
+
+print "Does IslSchedule respects WaR deps?";
+print WaR <= IslBefore;
+
+print "Codegen";
+codegen (IslSchedule * Domain);

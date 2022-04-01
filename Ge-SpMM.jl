@@ -62,9 +62,7 @@ function SpMM(  rowPtr::CuDeviceVector{Int32,1},
                 colInd::CuDeviceVector{Int32,1}, 
                 val::CuDeviceVector{Float64,1}, 
                 B::CuDeviceMatrix{Float64,1}, 
-                C::CuDeviceMatrix{Float64,1}#= , 
-                sm_k::CuDeviceVector{Int32,1}, 
-                sm_v::CuDeviceVector{Float64,1} =#) # This correspond to algo2 of the paper
+                C::CuDeviceMatrix{Float64,1})
     warp_size = warpsize() 
     tid = threadIdx().x
     tb_id = blockIdx().x
@@ -91,11 +89,10 @@ function SpMM(  rowPtr::CuDeviceVector{Int32,1},
                 result += sm_v[sm_base + kk] * B[k,j]
             end
         end
-        CUDA.sync_warp()
     end
     C[i,j] = result
     return nothing
-end #? function SpMM(rowPtr, colInd, val, B, C, sm_k, sm_v)
+end #? function SpMM(rowPtr, colInd, val, B, C)
 
 
 """
