@@ -22,11 +22,6 @@ Domain := [M,N,K,A_S] -> {
 
 
 
-    T[i0, j0, rs0, re0, ptr0] -> T[i1, j1, rs1, re1, ptr1] 
-        : i0 < i1 and re0 <= rs1
-
-
-
 Read := [M,N,K,A_S] -> {  # base read relations
     I[i, j] -> A_rowPtr[i];
     I[i, j] -> A_rowPtr[i+1];
